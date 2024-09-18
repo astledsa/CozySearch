@@ -3,18 +3,20 @@ import uuid
 import hashlib
 import psycopg2
 from datetime import datetime
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from r2 import config_client, upload_to_bucket
 from server import talk_to_db, get_data_from_db, exists_in_table
 from utilities import convert_to_sorted_url_count_list, intersection_of_tuples
 from utilities import get_text_from_URL, tokenize_and_embed_text, LLM_Agent_for_title_desc, embed_text_openAI
 
+load_dotenv()
 app = Flask(__name__)
-conn = psycopg2.connect(os.environ['DATABASE_URL'])
+conn = psycopg2.connect(os.getenv('DATABASE_URL'))
 client = config_client(
-    os.environ['R2_ACCOUNT_ID'], 
-    os.environ['R2_ACCESS_KEY_ID'], 
-    os.environ['R2_SECRET_ACCESS_KEY']
+    os.getenv('R2_ACCOUNT_ID'), 
+    os.getenv('R2_ACCESS_KEY_ID'), 
+    os.getenv('R2_SECRET_ACCESS_KEY')
 )
 
 @app.route('/api/post/url', methods=['POST'])
