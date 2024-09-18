@@ -20,6 +20,7 @@ packaging==24.1
 pgvector==0.3.3
 psycopg2==2.9.9
 python-dateutil==2.9.0.post0
+python-dotenv==1.0.1
 regex==2024.9.11
 requests==2.32.3
 s3transfer==0.10.2
