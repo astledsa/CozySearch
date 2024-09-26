@@ -91,6 +91,7 @@ def sendURL () :
                 )
 
         except Exception as e: 
+            print(e)
             return jsonify({
                 'status': 500,
                 'message' : f"Internal server error: {e}"
@@ -117,6 +118,7 @@ def sendMultipleURLs():
             raise ValueError("URLs must be provided as a list")
         
     except Exception as e:
+        print(e)
         return jsonify({
             'status': 400,
             'message': f"Error in parsing query parameters: {e}."
@@ -191,6 +193,7 @@ def sendMultipleURLs():
             })
 
         except Exception as e:
+            print(e)
             results.append({
                 'url': url,
                 'status': 500,
