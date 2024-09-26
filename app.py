@@ -273,6 +273,7 @@ def getThroughWords ():
             raise Exception ("Invalid query params")
         
     except Exception as e:
+        print(e)
         return jsonify({
             'status': 400,
             'Message': f'Error in parsing the query, {e}'
@@ -331,6 +332,7 @@ def getThroughDoc ():
             raise Exception ("Invalid query params")
     
     except Exception as e:
+        print(e)
         return jsonify({
             'status': 400,
             'message': f"Error parsing the request body, {e}"
@@ -379,7 +381,7 @@ def getThroughURL ():
             url = url[:-1]
 
     except Exception as e :
-
+        print(e)
         return jsonify({
             'status': 400,
             'message': f"Error parsing message, {e}"
