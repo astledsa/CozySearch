@@ -31,7 +31,7 @@ def sendURL () :
             url = url[:-1]
 
     except Exception as e :
-
+        print(e)
         return jsonify({
             'status': 400,
             'message': f"Error in parsing query parameters, {e}."
