@@ -1,7 +1,6 @@
 import os
 import uuid
 import hashlib
-import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
@@ -12,7 +11,7 @@ from utilities import get_text_from_URL, tokenize_and_embed_text, LLM_Agent_for_
 
 load_dotenv()
 app = Flask(__name__)
-conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+
 client = config_client(
     os.getenv('R2_ACCOUNT_ID'), 
     os.getenv('R2_ACCESS_KEY_ID'), 
@@ -40,15 +39,15 @@ def sendURL () :
     
     print(f"Uploading: {url}")
     
-    if exists_in_table(conn, 'pages', {'url': f"{url}"}) :
+    if exists_in_table( 'pages', {'url': f"{url}"}) :
         return jsonify({
             'status': 300,
             'message': "This URL already exists in the DB"
         })
     
-    if not exists_in_table (conn, 'users', {'id': f"{user_id}"}) :
+    if not exists_in_table ( 'users', {'id': f"{user_id}"}) :
+
         talk_to_db (
-            conn,
             "INSERT INTO suggestions (url, created_at) VALUES (%s, NOW())",
             (url,)
         )
@@ -60,7 +59,6 @@ def sendURL () :
     
     else:
         talk_to_db (
-            conn,
             "INSERT INTO queue (url, add_by, created_at) VALUES (%s, %s, NOW())",
             (url, user_id)
         )
@@ -73,7 +71,6 @@ def sendURL () :
             page_id = str(uuid.uuid4())
 
             talk_to_db(
-                conn,
                 """
                 INSERT INTO pages (id, created_at, title, url, embedding, added_by, date, description)
                 VALUES (%s, NOW(), %s, %s, %s, %s, NOW(), %s);
@@ -89,7 +86,6 @@ def sendURL () :
                 upload_to_bucket(client, content, key_hash, 'test-case')
 
                 talk_to_db (
-                    conn, 
                     "INSERT INTO chunks (page_id, content_id, embedding) VALUES (%s, %s, %s)",
                     (page_id, key_hash, embedding)
                 )
@@ -101,7 +97,6 @@ def sendURL () :
             })
 
         talk_to_db (
-            conn, 
             "DELETE FROM queue WHERE url=%s",
             (url,)
         )
@@ -127,10 +122,10 @@ def sendMultipleURLs():
             'message': f"Error in parsing query parameters: {e}."
         })
 
-    if not exists_in_table(conn, 'users', {'id': f"{user_id}"}):
+    if not exists_in_table( 'users', {'id': f"{user_id}"}):
         for url in urls:
             talk_to_db(
-                conn,
+                
                 "INSERT INTO suggestions (url, created_at) VALUES (%s, NOW())",
                 (url,)
             )
@@ -141,7 +136,7 @@ def sendMultipleURLs():
 
     results = []
     for url in urls:
-        if exists_in_table(conn, 'pages', {'url': f"{url}"}):
+        if exists_in_table( 'pages', {'url': f"{url}"}):
             results.append({
                 'url': url,
                 'status': 300,
@@ -150,7 +145,7 @@ def sendMultipleURLs():
             continue
 
         talk_to_db(
-            conn,
+            
             "INSERT INTO queue (url, add_by, created_at) VALUES (%s, %s, NOW())",
             (url, user_id)
         )
@@ -162,7 +157,7 @@ def sendMultipleURLs():
             page_id = str(uuid.uuid4())
 
             talk_to_db(
-                conn,
+                
                 """
                 INSERT INTO pages (id, created_at, title, url, embedding, added_by, date, description)
                 VALUES (%s, NOW(), %s, %s, %s, %s, NOW(), %s);
@@ -178,13 +173,13 @@ def sendMultipleURLs():
                 upload_to_bucket(client, content, key_hash, 'test-case')
 
                 talk_to_db(
-                    conn, 
+                     
                     "INSERT INTO chunks (page_id, content_id, embedding) VALUES (%s, %s, %s)",
                     (page_id, key_hash, embedding)
                 )
 
             talk_to_db(
-                conn, 
+                 
                 "DELETE FROM queue WHERE url=%s",
                 (url,)
             )
@@ -212,8 +207,8 @@ def sendMultipleURLs():
 def getThroughPhrase () :
 
     try :
-        phrase = request.json.get('sentence')
-        user_id = request.json.get('user_id')
+        phrase = request.args.get('sentence')
+        user_id = request.args.get('user_id')
 
         if phrase is None or user_id is None :
             raise Exception("Phrase of user_id must be provided")
@@ -228,7 +223,7 @@ def getThroughPhrase () :
     
     try:
         pageIDs = get_data_from_db (
-            conn,
+            
             "SELECT page_id, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
             (embed_text_openAI(phrase, 768), 10)
         )
@@ -240,8 +235,8 @@ def getThroughPhrase () :
 
         for ID in pageIDs :
             urls.append(get_data_from_db (
-                conn,
-                "SELECT url FROM pages WHERE id=%s",
+                
+                "SELECT (url, title) FROM pages WHERE id=%s",
                 (ID[0],)
             ))
 
@@ -252,7 +247,7 @@ def getThroughPhrase () :
         })
     
     talk_to_db (
-        conn,
+        
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (phrase, "phrase", user_id)
     )
@@ -288,7 +283,7 @@ def getThroughWords ():
 
         for embedings in embeddedWords :
             retreivedData = get_data_from_db(
-                conn,
+                
                 "SELECT page_id, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
                 (embedings, 10)
             )
@@ -298,7 +293,7 @@ def getThroughWords ():
         urls = list()
         for IDs in intersection_of_tuples(results) :
             urls.append(get_data_from_db (
-                conn,
+                
                 "SELECT url FROM pages WHERE id=%s",
                 (IDs,)
             ))
@@ -310,7 +305,7 @@ def getThroughWords ():
         })
     
     talk_to_db (
-        conn,
+        
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (", ".join(words), "words", user_id)
     )
@@ -342,7 +337,7 @@ def getThroughDoc ():
 
     try:
         urls = get_data_from_db (
-            conn,
+            
             "SELECT url, embedding <=> %s::vector AS distance FROM pages ORDER BY distance LIMIT %s",
             (embed_text_openAI(doc, 1024), 10)
         )
@@ -355,7 +350,7 @@ def getThroughDoc ():
         })
     
     talk_to_db (
-        conn,
+        
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (doc, "document", user_id)
     )
@@ -397,7 +392,7 @@ def getThroughURL ():
         results = list()
         for embedings in embeds :
             retreivedData = get_data_from_db(
-                conn,
+                
                 "SELECT page_id, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
                 (embedings, 10)
             )
@@ -407,7 +402,7 @@ def getThroughURL ():
         urls = list()
         for IDs in intersection_of_tuples(results) :
             urls.append(get_data_from_db (
-                conn,
+                
                 "SELECT url FROM pages WHERE id=%s",
                 (IDs,)
             ))
@@ -418,9 +413,9 @@ def getThroughURL ():
         })
     
 
-    if not exists_in_table (conn, 'pages', {'url': f"{url}"}):
+    if not exists_in_table ( 'pages', {'url': f"{url}"}):
         talk_to_db (
-            conn,
+            
             "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
             (url, "url", user_id)
         )
@@ -451,7 +446,7 @@ def getOpposite ():
     
     try:
         pageIDs = get_data_from_db (
-            conn,
+            
             """SELECT page_id, 1 - (embedding <=> %s::vector) AS neg_distance
                FROM chunks
                ORDER BY neg_distance ASC
@@ -466,7 +461,7 @@ def getOpposite ():
 
         for ID in pageIDs :
             urls.append(get_data_from_db (
-                conn,
+                
                 "SELECT url FROM pages WHERE id=%s",
                 (ID[0],)
             ))
@@ -478,7 +473,7 @@ def getOpposite ():
         })
     
     talk_to_db (
-        conn,
+        
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (phrase, "phrase", user_id)
     )
@@ -492,3 +487,5 @@ def getOpposite ():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+

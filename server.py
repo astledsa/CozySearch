@@ -1,12 +1,15 @@
+import os
+import psycopg2
 from pgvector.psycopg2 import register_vector
 
 def talk_to_db(
-        conn,
         query : str,
         values : tuple
     ):
 
     try:
+        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+
         cursor = conn.cursor()
 
         register_vector(conn)
@@ -19,8 +22,10 @@ def talk_to_db(
         print(f"Error performing the actionr: {e}")
 
 
-def get_data_from_db(conn, query, values=None):
+def get_data_from_db(query, values=None):
     try:
+        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+
         with conn.cursor() as cursor:
             cursor.execute(query, values)
             results = cursor.fetchall()
@@ -29,10 +34,11 @@ def get_data_from_db(conn, query, values=None):
         print(f"Error in retrieval: {e}")
         return None  
 
-def exists_in_table (conn, table_name, conditions):
+def exists_in_table (table_name, conditions):
 
     try:
-
+        conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+        
         cursor = conn.cursor()
         where_clause = " AND ".join([f"{key} = %s" for key in conditions.keys()])
         query = f"SELECT EXISTS(SELECT 1 FROM {table_name} WHERE {where_clause});"
