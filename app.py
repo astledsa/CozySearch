@@ -1,7 +1,12 @@
 import threading
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from api import process_url, get_opposite, get_matches_for_url, get_matches_for_phrase, get_matches_for_words, get_matches_for_doc
+from .api.processURL import process_url
+from .api.getForDocument import get_matches_for_doc
+from .api.getForPhrase import get_matches_for_phrase
+from .api.getForWords import get_matches_for_words
+from .api.getOpposite import get_opposite
+from .api.getForURL import get_matches_for_url
 
 load_dotenv()
 app = Flask(__name__)
@@ -20,7 +25,6 @@ def getWithWords():
     
     result = get_matches_for_phrase(phrase, user_id)
     return jsonify(result), result['status']
-
 
 @app.route('/api/get/url', methods=['GET'])
 def getThroughURL():
@@ -42,7 +46,6 @@ def getThroughURL():
     result = get_matches_for_url(url, user_id)
     return jsonify(result), result['status']
 
-
 @app.route('/api/get/opposite', methods=['GET'])
 def getOpposite():
     try:
@@ -62,7 +65,6 @@ def getOpposite():
     result = get_opposite(phrase, user_id)
     return jsonify(result), result['status']
 
-
 @app.route('/api/get/words', methods=['GET'])
 def getThroughWords():
     words = request.json['words']
@@ -77,7 +79,6 @@ def getThroughWords():
     result = get_matches_for_words(words, user_id)
     return jsonify(result), result['status']
 
-
 @app.route('/api/get/document', methods=['GET'])
 def getThroughDoc():
     doc = request.json['document']
@@ -85,10 +86,6 @@ def getThroughDoc():
     
     result = get_matches_for_doc(doc, user_id)
     return jsonify(result), result['status']
-
-
-
-
 
 @app.route('/api/post/url', methods=['POST'])
 def sendURL():
@@ -109,7 +106,7 @@ def sendURL():
         }), 400
 
     # Start processing in a separate thread
-    thread = threading.Thread(target=process_url_async, args=(url, user_id, client))
+    thread = threading.Thread(target=process_url_async, args=(url, user_id))
     thread.start()
 
     # Immediately return a 200 status
@@ -117,12 +114,6 @@ def sendURL():
         'status': 200,
         'message': "URL accepted for processing"
     }), 200
-
-def process_url_async(url, user_id):
-    result = process_url(url, user_id)
-    # You might want to log the result or handle it in some way
-    print(f"URL processing result: {result}")
-
 
 @app.route('/api/post/bulk', methods=['POST'])
 def sendMultipleURLs():
@@ -158,6 +149,10 @@ def process_urls_async(urls, user_id):
     
     print(f"URLs processing results: {results}")
  
+def process_url_async(url, user_id):
+    result = process_url(url, user_id)
+    
+    print(f"URL processing result: {result}")
 
 
 
