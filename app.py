@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from r2 import config_client, upload_to_bucket
 from server import talk_to_db, get_data_from_db, exists_in_table
-from utilities import convert_to_sorted_url_count_list, intersection_of_tuples
+from utilities import process_data, intersection_of_tuples
 from utilities import get_text_from_URL, tokenize_and_embed_text, LLM_Agent_for_title_desc, embed_text_openAI
 
 load_dotenv()
@@ -36,8 +36,6 @@ def sendURL () :
             'status': 400,
             'message': f"Error in parsing query parameters, {e}."
         })
-    
-    print(f"Uploading: {url}")
     
     if exists_in_table( 'pages', {'url': f"{url}"}) :
         return jsonify({
@@ -91,7 +89,6 @@ def sendURL () :
                 )
 
         except Exception as e: 
-            print(e)
             return jsonify({
                 'status': 500,
                 'message' : f"Internal server error: {e}"
@@ -101,8 +98,6 @@ def sendURL () :
             "DELETE FROM queue WHERE url=%s",
             (url,)
         )
-
-        print("Done!")
 
         return jsonify({
             'status': 200,
@@ -118,7 +113,6 @@ def sendMultipleURLs():
             raise ValueError("URLs must be provided as a list")
         
     except Exception as e:
-        print(e)
         return jsonify({
             'status': 400,
             'message': f"Error in parsing query parameters: {e}."
@@ -147,7 +141,6 @@ def sendMultipleURLs():
             continue
 
         talk_to_db(
-            
             "INSERT INTO queue (url, add_by, created_at) VALUES (%s, %s, NOW())",
             (url, user_id)
         )
@@ -193,7 +186,6 @@ def sendMultipleURLs():
             })
 
         except Exception as e:
-            print(e)
             results.append({
                 'url': url,
                 'status': 500,
@@ -221,8 +213,6 @@ def getThroughPhrase () :
             'status': 400,
             'Message': 'Error in parsing the query'
         })
-    
-    print(f"Attempting to retrieve for phrase: {phrase}")
     
     try:
         pageIDs = get_data_from_db (
@@ -254,12 +244,10 @@ def getThroughPhrase () :
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (phrase, "phrase", user_id)
     )
-
-    print("Done")
     
     return jsonify ({
         'status': 200,
-        'urls': convert_to_sorted_url_count_list (urls)
+        'urls': process_data (urls)
     })
     
 @app.route('/api/get/words', methods=['GET'])
@@ -273,13 +261,10 @@ def getThroughWords ():
             raise Exception ("Invalid query params")
         
     except Exception as e:
-        print(e)
         return jsonify({
             'status': 400,
             'Message': f'Error in parsing the query, {e}'
         })
-    
-    print("Retrievig based on words: ", words)
 
     try:
         results = list()
@@ -298,7 +283,7 @@ def getThroughWords ():
         for IDs in intersection_of_tuples(results) :
             urls.append(get_data_from_db (
                 
-                "SELECT url FROM pages WHERE id=%s",
+                "SELECT (url, title) FROM pages WHERE id=%s",
                 (IDs,)
             ))
     
@@ -309,16 +294,13 @@ def getThroughWords ():
         })
     
     talk_to_db (
-        
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (", ".join(words), "words", user_id)
     )
 
-    print("Done")
-
     return jsonify({
         'status': 200,
-        'urls' : convert_to_sorted_url_count_list(urls)
+        'urls' : process_data(urls)
     })
     
 @app.route('/api/get/document', methods=['GET'])
@@ -332,14 +314,11 @@ def getThroughDoc ():
             raise Exception ("Invalid query params")
     
     except Exception as e:
-        print(e)
         return jsonify({
             'status': 400,
             'message': f"Error parsing the request body, {e}"
         })
     
-    print("Retrieving based on document")
-
     try:
         urls = get_data_from_db (
             
@@ -348,7 +327,6 @@ def getThroughDoc ():
         )
 
     except Exception as e:
-        print(e)
         return jsonify({
             'status': 500,
             'message': "Internal server error"
@@ -359,8 +337,6 @@ def getThroughDoc ():
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (doc, "document", user_id)
     )
-    
-    print("Done")
 
     return jsonify({
         'status': 200,
@@ -381,7 +357,7 @@ def getThroughURL ():
             url = url[:-1]
 
     except Exception as e :
-        print(e)
+       
         return jsonify({
             'status': 400,
             'message': f"Error parsing message, {e}"
@@ -420,16 +396,13 @@ def getThroughURL ():
 
     if not exists_in_table ( 'pages', {'url': f"{url}"}):
         talk_to_db (
-            
             "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
             (url, "url", user_id)
         )
-    
-    print("Done")
 
     return jsonify({
         'status': 200,
-        'urls': convert_to_sorted_url_count_list(urls) 
+        'urls': process_data(urls) 
     })
 
 @app.route('/api/get/opposite', methods=['GET'])
@@ -447,11 +420,8 @@ def getOpposite ():
             'Message': 'Error in parsing the query'
         })
     
-    print(f"Attempting to retrieve opposite of phrase: {phrase}")
-    
     try:
         pageIDs = get_data_from_db (
-            
             """SELECT page_id, 1 - (embedding <=> %s::vector) AS neg_distance
                FROM chunks
                ORDER BY neg_distance ASC
@@ -467,7 +437,7 @@ def getOpposite ():
         for ID in pageIDs :
             urls.append(get_data_from_db (
                 
-                "SELECT url FROM pages WHERE id=%s",
+                "SELECT (url, title) FROM pages WHERE id=%s",
                 (ID[0],)
             ))
 
@@ -478,20 +448,16 @@ def getOpposite ():
         })
     
     talk_to_db (
-        
         "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
         (phrase, "phrase", user_id)
     )
-
-    print("Done")
     
     return jsonify ({
         'status': 200,
-        'urls': convert_to_sorted_url_count_list (urls)
+        'urls': process_data (urls)
     })
 
 if __name__ == '__main__':
-    print('Cozysearch server is running!')
-    app.run(debug=True, port=5000)
+    app.run(debug=True)
 
 

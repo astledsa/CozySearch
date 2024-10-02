@@ -3,17 +3,30 @@ import json
 import requests
 import tiktoken
 from bs4 import BeautifulSoup
+from collections import Counter
 
-def convert_to_sorted_url_count_list(url_list):
-    url_count = {}
-    for item in url_list:
-        url = item[0][0]  
-        url_count[url] = url_count.get(url, 0) + 1
+def process_data(input_data):
+    flattened_data = [item[0] for sublist in input_data for item in sublist]
+
+    processed_data = []
+    for item in flattened_data:
+        url, title = item.strip('()').split(',', 1)
+        url = url.strip('"')
+        title = title.strip().strip('"')
+        processed_data.append((url, title))
     
-    sorted_url_count = [{"url": url, "count": count} 
-                        for url, count in sorted(url_count.items(), key=lambda x: x[1], reverse=True)]
+    counter = Counter(processed_data)
+
+    result = [
+        {
+            "url": url,
+            "title": title,
+            "count": count
+        }
+        for (url, title), count in counter.items()
+    ]
     
-    return sorted_url_count
+    return result
 
 def intersection_of_tuples(tuples):
   
