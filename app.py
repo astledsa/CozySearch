@@ -1,108 +1,133 @@
-import os
-import uuid
-import hashlib
-from datetime import datetime
+import threading
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from r2 import config_client, upload_to_bucket
-from server import talk_to_db, get_data_from_db, exists_in_table
-from utilities import process_data, intersection_of_tuples
-from utilities import get_text_from_URL, tokenize_and_embed_text, LLM_Agent_for_title_desc, embed_text_openAI
+from api.processURL import process_url
+from api.getOpposite import get_opposite
+from api.getForURL import get_matches_for_url
+from api.getForPhrase import get_matches_for_phrase
+from api.getForWords import get_matches_for_words
+from api.getForDocument import get_matches_for_doc
 
 load_dotenv()
 app = Flask(__name__)
 
-client = config_client(
-    os.getenv('R2_ACCOUNT_ID'), 
-    os.getenv('R2_ACCESS_KEY_ID'), 
-    os.getenv('R2_SECRET_ACCESS_KEY')
-)
+@app.route('/api/get/phrase', methods=['GET'])
+def getWithWords():
+    try: 
+        phrase = request.args['sentence']
+        user_id = request.args['user_id']
+
+    except Exception as e:
+        return jsonify({
+            'status': 400,
+            'message': f"Missing params:, {e}"
+        }), 400
+    
+    result = get_matches_for_phrase(phrase, user_id)
+    return jsonify(result), result['status']
+
+
+@app.route('/api/get/url', methods=['GET'])
+def getThroughURL():
+    try:
+        url = request.json.get('url')
+        user_id = request.json.get('user_id')
+
+        if url is None or user_id is None:
+            raise Exception("URL and user_id must be provided")
+
+    except Exception as e:
+        return jsonify({
+            'status': 400,
+            'message': f"Error parsing message, {e}"
+        }), 400
+    
+    print("Retrieving based on url...")
+    
+    result = get_matches_for_url(url, user_id)
+    return jsonify(result), result['status']
+
+
+@app.route('/api/get/opposite', methods=['GET'])
+def getOpposite():
+    try:
+        phrase = request.json.get('sentence')
+        user_id = request.json.get('user_id')
+
+        if phrase is None or user_id is None:
+            raise Exception("Phrase or user_id must be provided")
+        
+    except Exception as e:
+        print(e)
+        return jsonify({
+            'status': 500,
+            'message': f'Error in parsing the query: {str(e)}'
+        }), 500
+    
+    result = get_opposite(phrase, user_id)
+    return jsonify(result), result['status']
+
+
+@app.route('/api/get/words', methods=['GET'])
+def getThroughWords():
+    words = request.json['words']
+    user_id = request.json['user_id']
+    
+    if not words:
+        return jsonify({
+            'status': 400,
+            'message': 'Words list cannot be empty'
+        }), 400
+
+    result = get_matches_for_words(words, user_id)
+    return jsonify(result), result['status']
+
+
+@app.route('/api/get/document', methods=['GET'])
+def getThroughDoc():
+    doc = request.json['document']
+    user_id = request.json['user_id']
+    
+    result = get_matches_for_doc(doc, user_id)
+    return jsonify(result), result['status']
+
+
+
+
 
 @app.route('/api/post/url', methods=['POST'])
-def sendURL () :
-
+def sendURL():
     try:
         user_id = request.json.get('user_id')
         url = request.json.get('url')
 
         if user_id is None or url is None:
-            raise Exception ("No URL or user ID provided")
+            raise Exception("No URL or user ID provided")
         if url.endswith('/'):
             url = url[:-1]
 
-    except Exception as e :
+    except Exception as e:
         print(e)
         return jsonify({
             'status': 400,
             'message': f"Error in parsing query parameters, {e}."
-        })
-    
-    if exists_in_table( 'pages', {'url': f"{url}"}) :
-        return jsonify({
-            'status': 300,
-            'message': "This URL already exists in the DB"
-        })
-    
-    if not exists_in_table ( 'users', {'id': f"{user_id}"}) :
+        }), 400
 
-        talk_to_db (
-            "INSERT INTO suggestions (url, created_at) VALUES (%s, NOW())",
-            (url,)
-        )
+    # Start processing in a separate thread
+    thread = threading.Thread(target=process_url_async, args=(url, user_id, client))
+    thread.start()
 
-        return jsonify({
-            'status': 401,
-            'message': f"User: {user_id} is unauthorized"
-        })
-    
-    else:
-        talk_to_db (
-            "INSERT INTO queue (url, add_by, created_at) VALUES (%s, %s, NOW())",
-            (url, user_id)
-        )
+    # Immediately return a 200 status
+    return jsonify({
+        'status': 200,
+        'message': "URL accepted for processing"
+    }), 200
 
-        try :
+def process_url_async(url, user_id):
+    result = process_url(url, user_id)
+    # You might want to log the result or handle it in some way
+    print(f"URL processing result: {result}")
 
-            heads, content = get_text_from_URL(url)
-            chunksList = tokenize_and_embed_text(content, 800, 0.5, 768)
-            title, description = LLM_Agent_for_title_desc(heads, content)
-            page_id = str(uuid.uuid4())
-
-            talk_to_db(
-                """
-                INSERT INTO pages (id, created_at, title, url, embedding, added_by, date, description)
-                VALUES (%s, NOW(), %s, %s, %s, %s, NOW(), %s);
-                """,
-                (page_id, title, url, embed_text_openAI(content, 1024), user_id, description)
-            )
-
-            for (content, embedding) in chunksList :
-                key = f"{content}-{datetime.timestamp(datetime.now())}-{url}"
-                key_encoded = key.encode('utf-8')
-                key_hash = hashlib.md5(key_encoded).hexdigest()
-                content = content.encode('utf-8')
-                upload_to_bucket(client, content, key_hash, 'test-case')
-
-                talk_to_db (
-                    "INSERT INTO chunks (page_id, content_id, embedding) VALUES (%s, %s, %s)",
-                    (page_id, key_hash, embedding)
-                )
-
-        except Exception as e: 
-            return jsonify({
-                'status': 500,
-                'message' : f"Internal server error: {e}"
-            })
-
-        talk_to_db (
-            "DELETE FROM queue WHERE url=%s",
-            (url,)
-        )
-
-        return jsonify({
-            'status': 200,
-            'message': "Successfully Embedded"
-        })
 
 @app.route('/api/post/bulk', methods=['POST'])
 def sendMultipleURLs():
@@ -116,346 +141,30 @@ def sendMultipleURLs():
         return jsonify({
             'status': 400,
             'message': f"Error in parsing query parameters: {e}."
-        })
+        }), 400
 
-    if not exists_in_table( 'users', {'id': f"{user_id}"}):
-        for url in urls:
-            talk_to_db(
-                
-                "INSERT INTO suggestions (url, created_at) VALUES (%s, NOW())",
-                (url,)
-            )
-        return jsonify({
-            'status': 401,
-            'message': f"User: {user_id} is unauthorized"
-        })
+    thread = threading.Thread(target=process_urls_async, args=(urls, user_id))
+    thread.start()
 
+    return jsonify({
+        'status': 200,
+        'message': f"{len(urls)} URLs accepted for processing"
+    }), 200
+
+def process_urls_async(urls, user_id):
     results = []
     for url in urls:
-        if exists_in_table( 'pages', {'url': f"{url}"}):
-            results.append({
-                'url': url,
-                'status': 300,
-                'message': "This URL already exists in the DB"
-            })
-            continue
-
-        talk_to_db(
-            "INSERT INTO queue (url, add_by, created_at) VALUES (%s, %s, NOW())",
-            (url, user_id)
-        )
-
-        try:
-            heads, content = get_text_from_URL(url)
-            chunksList = tokenize_and_embed_text(content, 800, 0.5, 768)
-            title, description = LLM_Agent_for_title_desc(heads, content)
-            page_id = str(uuid.uuid4())
-
-            talk_to_db(
-                
-                """
-                INSERT INTO pages (id, created_at, title, url, embedding, added_by, date, description)
-                VALUES (%s, NOW(), %s, %s, %s, %s, NOW(), %s);
-                """,
-                (page_id, title, url, embed_text_openAI(content, 1024), user_id, description)
-            )
-
-            for (content, embedding) in chunksList:
-                key = f"{content}-{datetime.timestamp(datetime.now())}-{url}"
-                key_encoded = key.encode('utf-8')
-                key_hash = hashlib.md5(key_encoded).hexdigest()
-                content = content.encode('utf-8')
-                upload_to_bucket(client, content, key_hash, 'test-case')
-
-                talk_to_db(
-                     
-                    "INSERT INTO chunks (page_id, content_id, embedding) VALUES (%s, %s, %s)",
-                    (page_id, key_hash, embedding)
-                )
-
-            talk_to_db(
-                 
-                "DELETE FROM queue WHERE url=%s",
-                (url,)
-            )
-
-            results.append({
-                'url': url,
-                'status': 200,
-                'message': "Successfully Embedded"
-            })
-
-        except Exception as e:
-            results.append({
-                'url': url,
-                'status': 500,
-                'message': f"Internal server error: {e}"
-            })
-
-    return jsonify({
-        'status': 200,
-        'message': 'URLs uploaded',
-        'results': results
-    })
-
-@app.route('/api/get/phrase', methods=['GET'])
-def getThroughPhrase () :
-
-    try :
-        phrase = request.args.get('sentence')
-        user_id = request.args.get('user_id')
-
-        if phrase is None or user_id is None :
-            raise Exception("Phrase of user_id must be provided")
-        
-    except:
-        return jsonify({
-            'status': 400,
-            'Message': 'Error in parsing the query'
+        result = process_url(url, user_id)
+        results.append({
+            'url': url,
+            'status': result['status'],
+            'message': result['message']
         })
     
-    try:
-        pageIDs = get_data_from_db (
-            
-            "SELECT page_id, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
-            (embed_text_openAI(phrase, 768), 10)
-        )
+    print(f"URLs processing results: {results}")
+ 
 
-        if pageIDs is None :
-            raise Exception ("Error in retrieval")
-    
-        urls = list()
 
-        for ID in pageIDs :
-            urls.append(get_data_from_db (
-                
-                "SELECT (url, title) FROM pages WHERE id=%s",
-                (ID[0],)
-            ))
-
-    except :
-        return jsonify({
-            'status': 500,
-            'message': 'Internal Server Error'
-        })
-    
-    talk_to_db (
-        
-        "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
-        (phrase, "phrase", user_id)
-    )
-    
-    return jsonify ({
-        'status': 200,
-        'urls': process_data (urls)
-    })
-    
-@app.route('/api/get/words', methods=['GET'])
-def getThroughWords ():
-
-    try:
-        words = request.json.get('words')
-        user_id = request.json.get('user_id')
-
-        if words is None or words == [] or user_id is None:
-            raise Exception ("Invalid query params")
-        
-    except Exception as e:
-        return jsonify({
-            'status': 400,
-            'Message': f'Error in parsing the query, {e}'
-        })
-
-    try:
-        results = list()
-        embeddedWords = [embed_text_openAI(word, 768) for word in words]
-
-        for embedings in embeddedWords :
-            retreivedData = get_data_from_db(
-                
-                "SELECT page_id, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
-                (embedings, 10)
-            )
-        
-            results.append([point[0] for point in retreivedData])
-    
-        urls = list()
-        for IDs in intersection_of_tuples(results) :
-            urls.append(get_data_from_db (
-                
-                "SELECT (url, title) FROM pages WHERE id=%s",
-                (IDs,)
-            ))
-    
-    except:
-        return jsonify({
-            'status': 500,
-            'message': 'Internal Server Error'
-        })
-    
-    talk_to_db (
-        "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
-        (", ".join(words), "words", user_id)
-    )
-
-    return jsonify({
-        'status': 200,
-        'urls' : process_data(urls)
-    })
-    
-@app.route('/api/get/document', methods=['GET'])
-def getThroughDoc ():
-
-    try:
-        doc = request.json.get('document')
-        user_id = request.json.get('user_id')
-
-        if doc is None or user_id is None :
-            raise Exception ("Invalid query params")
-    
-    except Exception as e:
-        return jsonify({
-            'status': 400,
-            'message': f"Error parsing the request body, {e}"
-        })
-    
-    try:
-        urls = get_data_from_db (
-            
-            "SELECT url, embedding <=> %s::vector AS distance FROM pages ORDER BY distance LIMIT %s",
-            (embed_text_openAI(doc, 1024), 10)
-        )
-
-    except Exception as e:
-        return jsonify({
-            'status': 500,
-            'message': "Internal server error"
-        })
-    
-    talk_to_db (
-        
-        "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
-        (doc, "document", user_id)
-    )
-
-    return jsonify({
-        'status': 200,
-        'urls': [url[0] for url in urls]
-    })
-
-@app.route('/api/get/url', methods=['GET'])
-def getThroughURL ():
-
-    try:
-
-        url = request.json.get('url')
-        user_id = request.json.get('user_id')
-
-        if url is None or user_id is None :
-            raise Exception("URL and user_id must be provided")
-        if url.endswith('/'):
-            url = url[:-1]
-
-    except Exception as e :
-       
-        return jsonify({
-            'status': 400,
-            'message': f"Error parsing message, {e}"
-        })
-    
-    print("Retrieving based on url")
-    
-    try :
-        heads, content = get_text_from_URL(url)
-        title, desc = LLM_Agent_for_title_desc(heads, content)
-        embeds = [embed_text_openAI(title, 768), embed_text_openAI(desc, 768)]
-
-        results = list()
-        for embedings in embeds :
-            retreivedData = get_data_from_db(
-                
-                "SELECT page_id, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
-                (embedings, 10)
-            )
-        
-            results.append([point[0] for point in retreivedData])
-    
-        urls = list()
-        for IDs in intersection_of_tuples(results) :
-            urls.append(get_data_from_db (
-                
-                "SELECT url FROM pages WHERE id=%s",
-                (IDs,)
-            ))
-    except:
-        return jsonify({
-            'status': 500,
-            'message': 'Internal server error'
-        })
-    
-
-    if not exists_in_table ( 'pages', {'url': f"{url}"}):
-        talk_to_db (
-            "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
-            (url, "url", user_id)
-        )
-
-    return jsonify({
-        'status': 200,
-        'urls': process_data(urls) 
-    })
-
-@app.route('/api/get/opposite', methods=['GET'])
-def getOpposite ():
-    try :
-        phrase = request.json.get('sentence')
-        user_id = request.json.get('user_id')
-
-        if phrase is None or user_id is None :
-            raise Exception("Phrase of user_id must be provided")
-        
-    except:
-        return jsonify({
-            'status': 400,
-            'Message': 'Error in parsing the query'
-        })
-    
-    try:
-        pageIDs = get_data_from_db (
-            """SELECT page_id, 1 - (embedding <=> %s::vector) AS neg_distance
-               FROM chunks
-               ORDER BY neg_distance ASC
-               LIMIT %s;""",
-            (embed_text_openAI(phrase, 768), 10)
-        )
-
-        if pageIDs is None :
-            raise Exception ("Error in retrieval")
-    
-        urls = list()
-
-        for ID in pageIDs :
-            urls.append(get_data_from_db (
-                
-                "SELECT (url, title) FROM pages WHERE id=%s",
-                (ID[0],)
-            ))
-
-    except :
-        return jsonify({
-            'status': 500,
-            'message': 'Internal Server Error'
-        })
-    
-    talk_to_db (
-        "INSERT INTO requests (created_at, content, type, user_id) VALUES (NOW(), %s, %s, %s)",
-        (phrase, "phrase", user_id)
-    )
-    
-    return jsonify ({
-        'status': 200,
-        'urls': process_data (urls)
-    })
 
 if __name__ == '__main__':
     app.run(debug=True)
