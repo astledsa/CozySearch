@@ -1,12 +1,12 @@
 import threading
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from .api.processURL import process_url
-from .api.getForDocument import get_matches_for_doc
-from .api.getForPhrase import get_matches_for_phrase
-from .api.getForWords import get_matches_for_words
-from .api.getOpposite import get_opposite
-from .api.getForURL import get_matches_for_url
+from src.api.processURL import process_url
+from src.api.getForDocument import get_matches_for_doc
+from src.api.getForPhrase import get_matches_for_phrase
+from src.api.getForWords import get_matches_for_words
+from src.api.getOpposite import get_opposite
+from src.api.getForURL import get_matches_for_url
 
 load_dotenv()
 app = Flask(__name__)
