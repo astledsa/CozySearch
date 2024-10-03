@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import threading
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from src.api import (
+from api import (
     getOpposite,
     getForDocument,
     getForPhrase,
