@@ -1,18 +1,13 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import threading
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from api import (
-    getOpposite,
-    getForDocument,
-    getForPhrase,
-    getForURL,
-    getForWords,
-    processURL
-)
+from getForDocument import get_matches_for_doc
+from getForPhrase import get_matches_for_phrase
+from getForURL import get_matches_for_url
+from getForWords import get_matches_for_words
+from getOpposite import get_opposite
+from processURL import process_url
+
 
 load_dotenv()
 app = Flask(__name__)
@@ -29,7 +24,7 @@ def getWithWords():
             'message': f"Missing params:, {e}"
         }), 400
     
-    result = getForPhrase.get_matches_for_phrase(phrase, user_id)
+    result = get_matches_for_phrase(phrase, user_id)
     return jsonify(result), result['status']
 
 @app.route('/api/get/url', methods=['GET'])
@@ -49,7 +44,7 @@ def getThroughURL():
     
     print("Retrieving based on url...")
     
-    result = getForURL.get_matches_for_url(url, user_id)
+    result = get_matches_for_url(url, user_id)
     return jsonify(result), result['status']
 
 @app.route('/api/get/opposite', methods=['GET'])
@@ -68,7 +63,7 @@ def getOpposite():
             'message': f'Error in parsing the query: {str(e)}'
         }), 500
     
-    result = getOpposite.get_opposite(phrase, user_id)
+    result = get_opposite(phrase, user_id)
     return jsonify(result), result['status']
 
 @app.route('/api/get/words', methods=['GET'])
@@ -82,7 +77,7 @@ def getThroughWords():
             'message': 'Words list cannot be empty'
         }), 400
 
-    result = getForWords.get_matches_for_words(words, user_id)
+    result = get_matches_for_words(words, user_id)
     return jsonify(result), result['status']
 
 @app.route('/api/get/document', methods=['GET'])
@@ -90,7 +85,7 @@ def getThroughDoc():
     doc = request.json['document']
     user_id = request.json['user_id']
     
-    result = getForDocument.get_matches_for_doc(doc, user_id)
+    result = get_matches_for_doc(doc, user_id)
     return jsonify(result), result['status']
 
 @app.route('/api/post/url', methods=['POST'])
@@ -146,7 +141,7 @@ def sendMultipleURLs():
 def process_urls_async(urls, user_id):
     results = []
     for url in urls:
-        result = processURL.process_url(url, user_id)
+        result = process_url(url, user_id)
         results.append({
             'url': url,
             'status': result['status'],
@@ -156,7 +151,7 @@ def process_urls_async(urls, user_id):
     print(f"URLs processing results: {results}")
  
 def process_url_async(url, user_id):
-    result = processURL.process_url(url, user_id)
+    result = process_url(url, user_id)
     
     print(f"URL processing result: {result}")
 
