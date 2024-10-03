@@ -1,7 +1,7 @@
 import threading
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from .api import (
+from src.api import (
     getOpposite,
     getForDocument,
     getForPhrase,
