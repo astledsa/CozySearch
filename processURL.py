@@ -43,7 +43,7 @@ def process_url(url, user_id):
         )
 
         title, content = get_content_from_url(url)
-        chunksList = tokenize_and_embed_text(content, 800, 0.5, 768)
+        chunksList = tokenize_and_embed_text(content, 800, 0.25, 768)
         page_id = str(uuid.uuid4())
 
         talk_to_db(
