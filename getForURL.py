@@ -1,14 +1,18 @@
 from server import get_data_from_db, talk_to_db, exists_in_table
-from utilities import get_text_from_URL, LLM_Agent_for_title_desc, process_data, intersection_of_tuples, embed_text_openAI
+from utilities import (
+    get_content_from_url, 
+    process_data, 
+    intersection_of_tuples, 
+    embed_text_openAI
+)
 
 def get_matches_for_url(url, user_id):
     try:
         if url.endswith('/'):
             url = url[:-1]
 
-        heads, content = get_text_from_URL(url)
-        title, desc = LLM_Agent_for_title_desc(heads, content)
-        embeds = [embed_text_openAI(title, 768), embed_text_openAI(desc, 768)]
+        title, content = get_content_from_url(url)
+        embeds = [embed_text_openAI(title, 768), embed_text_openAI(content, 768)]
 
         results = []
         for embedding in embeds:

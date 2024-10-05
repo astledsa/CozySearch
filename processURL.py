@@ -4,7 +4,11 @@ import hashlib
 from datetime import datetime
 from dotenv import load_dotenv
 from server import talk_to_db, exists_in_table
-from utilities import get_text_from_URL, tokenize_and_embed_text, embed_text_openAI, LLM_Agent_for_title_desc
+from utilities import ( 
+    get_content_from_url, 
+    tokenize_and_embed_text, 
+    embed_text_openAI, 
+)
 from r2 import upload_to_bucket, config_client
 
 load_dotenv()
@@ -38,17 +42,16 @@ def process_url(url, user_id):
             (url, user_id)
         )
 
-        heads, content = get_text_from_URL(url)
+        title, content = get_content_from_url(url)
         chunksList = tokenize_and_embed_text(content, 800, 0.5, 768)
-        title, description = LLM_Agent_for_title_desc(heads, content)
         page_id = str(uuid.uuid4())
 
         talk_to_db(
             """
-            INSERT INTO pages (id, created_at, title, url, embedding, added_by, date, description)
+            INSERT INTO pages (id, created_at, title, url, embedding, added_by, date)
             VALUES (%s, NOW(), %s, %s, %s, %s, NOW(), %s);
             """,
-            (page_id, title, url, embed_text_openAI(content, 1024), user_id, description)
+            (page_id, title, url, embed_text_openAI(content, 1024), user_id)
         )
 
         for (content, embedding) in chunksList:
