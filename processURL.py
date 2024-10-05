@@ -59,7 +59,7 @@ def process_url(url, user_id):
             key_encoded = key.encode('utf-8')
             key_hash = hashlib.md5(key_encoded).hexdigest()
             content = content.encode('utf-8')
-            upload_to_bucket(client, content, key_hash, 'test-case')
+            upload_to_bucket(client, content, key_hash, 'cozychunks')
 
             talk_to_db(
                 "INSERT INTO chunks (page_id, content_id, embedding) VALUES (%s, %s, %s)",
