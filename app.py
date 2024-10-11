@@ -7,6 +7,7 @@ from getForURL import get_matches_for_url
 from getForWords import get_matches_for_words
 from getOpposite import get_opposite
 from processURL import process_url
+from server import exists_in_table, get_data_from_db
 
 
 load_dotenv()
@@ -138,6 +139,44 @@ def sendMultipleURLs():
         'message': f"{len(urls)} URLs accepted for processing"
     }), 200
 
+@app.route('/api/get/stats', methods=['GET'])
+def getStats () :
+    try:
+        user_id = request.json.get('user_id')
+
+    except Exception as e:
+        return jsonify({
+            'status': 400,
+            'message': f"Error in parsing query parameters: {e}."
+        }), 400
+    
+    if not exists_in_table("users", {"id": f"{user_id}"}) :
+        return jsonify({
+            'status': 401,
+            'message': f"User {user_id} is not authorized"
+        })
+    
+    try:
+        no_of_links = get_data_from_db("SELECT COUNT(*) FROM pages")
+        no_of_requests = get_data_from_db("SELECT COUNT(*) FROM requests")
+        no_in_queue = get_data_from_db("SELECT COUNT(*) FROM queue")
+    except:
+        return jsonify({
+            'status': 500,
+            'message': "Internal Server Error (in retrieving values from Db)"
+        })
+    
+    return jsonify({
+        'status': 200,
+        'message': {
+            'links_added': no_of_links,
+            'searches': no_of_requests,
+            'links_in_queue': no_in_queue
+        }
+    })
+    
+
+
 def process_urls_async(urls, user_id):
     results = []
     for url in urls:
@@ -154,7 +193,6 @@ def process_url_async(url, user_id):
     result = process_url(url, user_id)
     
     print(f"URL processing result: {result}")
-
 
 
 if __name__ == '__main__':
