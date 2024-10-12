@@ -5,7 +5,7 @@ def get_matches_for_phrase(phrase, user_id):
     try:
         pageIDs = get_data_from_db(
             "SELECT page_id, embedding <=> %s::vector AS distance FROM chunks ORDER BY distance LIMIT %s",
-            (embed_text_openAI(phrase, 768), 10)
+            (embed_text_openAI(phrase, 768), 20)
         )
 
         if pageIDs is None:
