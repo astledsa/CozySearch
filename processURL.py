@@ -49,7 +49,7 @@ def process_url(url, user_id):
         talk_to_db(
             """
             INSERT INTO pages (id, created_at, title, url, embedding, added_by, date)
-            VALUES (%s, NOW(), %s, %s, %s, %s, NOW(), %s);
+            VALUES (%s, NOW(), %s, %s, %s, %s, NOW());
             """,
             (page_id, title, url, embed_text_openAI(content, 1024), user_id)
         )
