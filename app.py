@@ -13,7 +13,7 @@ from server import exists_in_table, get_data_from_db
 load_dotenv()
 app = Flask(__name__)
 
-@app.route('/api/get/phrase', methods=['GET'])
+@app.route('/get/phrase', methods=['GET'])
 def getWithWords():
     try: 
         phrase = request.args['sentence']
@@ -28,7 +28,7 @@ def getWithWords():
     result = get_matches_for_phrase(phrase, user_id)
     return jsonify(result), result['status']
 
-@app.route('/api/get/url', methods=['GET'])
+@app.route('/get/url', methods=['GET'])
 def getThroughURL():
     try:
         url = request.json.get('url')
@@ -48,7 +48,7 @@ def getThroughURL():
     result = get_matches_for_url(url, user_id)
     return jsonify(result), result['status']
 
-@app.route('/api/get/opposite', methods=['GET'])
+@app.route('/get/opposite', methods=['GET'])
 def getOpposite():
     try:
         phrase = request.json.get('sentence')
@@ -67,7 +67,7 @@ def getOpposite():
     result = get_opposite(phrase, user_id)
     return jsonify(result), result['status']
 
-@app.route('/api/get/words', methods=['GET'])
+@app.route('/get/words', methods=['GET'])
 def getThroughWords():
     words = request.json['words']
     user_id = request.json['user_id']
@@ -81,7 +81,7 @@ def getThroughWords():
     result = get_matches_for_words(words, user_id)
     return jsonify(result), result['status']
 
-@app.route('/api/get/document', methods=['GET'])
+@app.route('/get/document', methods=['GET'])
 def getThroughDoc():
     doc = request.json['document']
     user_id = request.json['user_id']
@@ -89,7 +89,7 @@ def getThroughDoc():
     result = get_matches_for_doc(doc, user_id)
     return jsonify(result), result['status']
 
-@app.route('/api/post/url', methods=['POST'])
+@app.route('/post/url', methods=['POST'])
 def sendURL():
     try:
         user_id = request.json.get('user_id')
@@ -117,7 +117,7 @@ def sendURL():
         'message': "URL accepted for processing"
     }), 200
 
-@app.route('/api/post/bulk', methods=['POST'])
+@app.route('/post/bulk', methods=['POST'])
 def sendMultipleURLs():
     try:
         user_id = request.json.get('user_id')
@@ -139,22 +139,22 @@ def sendMultipleURLs():
         'message': f"{len(urls)} URLs accepted for processing"
     }), 200
 
-@app.route('/api/get/stats', methods=['GET'])
+@app.route('/get/stats', methods=['GET'])
 def getStats () :
-    try:
-        user_id = request.json.get('user_id')
+    # try:
+    #     user_id = request.json.get('user_id')
 
-    except Exception as e:
-        return jsonify({
-            'status': 400,
-            'message': f"Error in parsing query parameters: {e}."
-        }), 400
+    # except Exception as e:
+    #     return jsonify({
+    #         'status': 400,
+    #         'message': f"Error in parsing query parameters: {e}."
+    #     }), 400
     
-    if not exists_in_table("users", {"id": f"{user_id}"}) :
-        return jsonify({
-            'status': 401,
-            'message': f"User {user_id} is not authorized"
-        })
+    # if not exists_in_table("users", {"id": f"{user_id}"}) :
+    #     return jsonify({
+    #         'status': 401,
+    #         'message': f"User {user_id} is not authorized"
+    #     })
     
     try:
         no_of_links = get_data_from_db("SELECT COUNT(*) FROM pages")
@@ -174,9 +174,8 @@ def getStats () :
             'links_in_queue': no_in_queue
         }
     })
+   
     
-
-
 def process_urls_async(urls, user_id):
     results = []
     for url in urls:
